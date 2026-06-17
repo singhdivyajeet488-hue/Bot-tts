@@ -19,7 +19,6 @@ class TTSManager {
         this.queue = [];
         this.isPlaying = false;
 
-        // Establish the connection with optimized cloud streaming configurations
         this.connection = joinVoiceChannel({
             channelId: voiceChannelId,
             guildId: guildId,
@@ -31,18 +30,13 @@ class TTSManager {
         this.player = createAudioPlayer();
         this.connection.subscribe(this.player);
 
-        // Debug Tracker: Prints exactly what the player is doing inside Railway Deploy Logs
-        this.player.on('stateChange', (oldState, newState) => {
-            console.log(`LOG [TTS Player]: Changed status from ${oldState.status} to ${newState.status}`);
-        });
-
         this.player.on(AudioPlayerStatus.Idle, () => {
             this.isPlaying = false;
             this.processQueue();
         });
 
         this.player.on('error', error => {
-            console.error('LOG [TTS Player Runtime Error]:', error.message);
+            console.error('LOG [TTS Player Error]:', error.message);
             this.isPlaying = false;
             this.processQueue();
         });
@@ -83,30 +77,27 @@ class TTSManager {
         const currentText = this.queue.shift();
 
         try {
-            // Unrestricted Google engine matrix query link
-            const targetUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(currentText)}&tl=hi&total=1&idx=0&textlen=${currentText.length}&client=tw-ob&ttsspeed=1`;
+            // Using a highly stable, completely alternative public TTS delivery route
+            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=hi&client=tw-ob&q=${encodeURIComponent(currentText)}`;
 
             const response = await axios({
                 method: 'get',
-                url: targetUrl,
+                url: ttsUrl,
                 responseType: 'stream',
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
                 }
             });
 
-            // Convert raw input using Arbitrary stream types and force inline volume activation
             const resource = createAudioResource(response.data, {
                 inputType: StreamType.Arbitrary,
                 inlineVolume: true
             });
 
-            // Set absolute scale volume to 1.0 (100%) to ensure it pushes data down the pipe
             resource.volume.setVolume(1.0);
-
             this.player.play(resource);
         } catch (err) {
-            console.error('TTS Audio Processing Layer Error:', err.message);
+            console.error('TTS Engine streaming failed:', err.message);
             this.isPlaying = false;
             setTimeout(() => this.processQueue(), 1000);
         }
