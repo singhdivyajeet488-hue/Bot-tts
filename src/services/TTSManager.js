@@ -4,6 +4,7 @@ const {
     createAudioResource, 
     AudioPlayerStatus, 
     VoiceConnectionStatus,
+    StreamType,
     entersState 
 } = require('@discordjs/voice');
 const googleTTS = require('google-tts-api');
@@ -32,9 +33,13 @@ class TTSManager {
             this.processQueue();
         });
 
+        // Debug logging to track player state transitions in your console logs
+        this.player.on('stateChange', (oldState, newState) => {
+            console.log(`LOG [TTS Player]: Transitioned from ${oldState.status} to ${newState.status}`);
+        });
+
         this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
             try {
-                // Attempt to wait up to 5 seconds to reconnect automatically
                 await Promise.race([
                     entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
                     entersState(this.connection, VoiceConnectionStatus.Connecting, 5000),
@@ -78,7 +83,11 @@ class TTSManager {
                 timeout: 10000,
             });
 
-            const resource = createAudioResource(url);
+            // FIX: Explicitly pass StreamType.Arbitrary so FFmpeg demuxes the web link correctly
+            const resource = createAudioResource(url, {
+                inputType: StreamType.Arbitrary
+            });
+
             this.player.play(resource);
         } catch (err) {
             console.error('Audio Generation Processing Error via TTS layer:', err);
