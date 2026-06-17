@@ -1,8 +1,10 @@
+// Locate and bind static FFmpeg binary paths for cloud containers
+const ffmpeg = require('ffmpeg-static');
+process.env.FFMPEG_PATH = ffmpeg;
+
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const config = require('./utils/config');
 const connectDB = require('./database/mongoose');
-const fs = require('fs');
-const path = require('path');
 
 const client = new Client({
     intents: [
@@ -14,9 +16,9 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.ttsManagers = new Map(); // Dynamic mapping tracking guild voice channels
+client.ttsManagers = new Map();
 
-// Run Handlers
+// Run System Handlers
 connectDB();
 ['commands', 'events'].forEach(handler => {
     require(`./handlers/${handler}`)(client);
