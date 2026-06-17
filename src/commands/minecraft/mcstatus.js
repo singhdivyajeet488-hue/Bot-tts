@@ -13,15 +13,15 @@ module.exports = {
         const ip = interaction.options.getString('ip');
 
         try {
-            // Safe resilient open lookup platform handling direct metadata indexing
+            // Fetch raw server data from the open status API
             const res = await axios.get(`https://api.mcsrvstat.us/3/${encodeURIComponent(ip)}`);
             const data = res.data;
 
             if (!data.online) {
                 const offlineEmbed = new EmbedBuilder()
-                    .setTitle('🌐 Server Lookup status')
+                    .setTitle('🌐 Server Lookup Status')
                     .setColor('#FF5555')
-                    .setDescription(`🌐 **Server IP:**\n${ip}\n\n🟢 **Status:**\nOffline or Unreachable`)
+                    .setDescription(`🌐 **Server IP:**\n\`${ip}\` *(Click to copy)*\n\n🟢 **Status:**\nOffline or Unreachable`)
                     .setTimestamp();
                 return interaction.editReply({ embeds: [offlineEmbed] });
             }
@@ -29,23 +29,20 @@ module.exports = {
             const motdClean = data.motd && data.motd.clean ? data.motd.clean.join('\n') : 'No description visible';
             const version = data.version ? data.version : 'Unknown';
             const onlinePlayers = data.players ? `${data.players.online} / ${data.players.max}` : '0 / 0';
-            
-            // Extract mods/plugins TPS or generic tracking if injected
-            const tps = (data.info && data.info.tps) ? `${data.info.tps}` : 'N/A';
 
+            // Build embed output with copyable IP formatting and no TPS field
             const statusEmbed = new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setDescription(
-                    `🌐 **Server IP:**\n${ip}\n\n` +
+                    `🌐 **Server IP:**\n\`${ip}\`\n\n` +
                     `🛠 **Version:**\n${version}\n\n` +
                     `👥 **Online Players:**\n${onlinePlayers}\n\n` +
-                    `⚡ **TPS:**\n${tps}\n\n` +
                     `🟢 **Status:**\nOnline\n\n` +
                     `📜 **MOTD:**\n\`\`\`${motdClean}\`\`\``
                 )
                 .setTimestamp();
 
-            // Set dynamic icon favicon structural handling if active
+            // Set the server favicon as the thumbnail if it exists
             if (data.icon) {
                 statusEmbed.setThumbnail(`https://api.mcsrvstat.us/icon/${encodeURIComponent(ip)}`);
             }
