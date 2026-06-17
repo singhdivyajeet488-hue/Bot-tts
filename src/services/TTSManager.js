@@ -9,6 +9,7 @@ const {
 } = require('@discordjs/voice');
 const googleTTS = require('google-tts-api');
 const emojiMap = require('emoji-name-map');
+const axios = require('axios'); // Used to pull down clean raw stream streams
 
 class TTSManager {
     constructor(guildId, textChannelId, voiceChannelId, client) {
@@ -23,6 +24,8 @@ class TTSManager {
             channelId: voiceChannelId,
             guildId: guildId,
             adapterCreator: client.guilds.cache.get(guildId).voiceAdapterCreator,
+            selfDeaf: false, // Ensure self-deaf is false so the connection handles voice processing frames natively
+            selfMute: false
         });
 
         this.player = createAudioPlayer();
@@ -33,9 +36,10 @@ class TTSManager {
             this.processQueue();
         });
 
-        // Debug logging to track player state transitions in your console logs
-        this.player.on('stateChange', (oldState, newState) => {
-            console.log(`LOG [TTS Player]: Transitioned from ${oldState.status} to ${newState.status}`);
+        this.player.on('error', error => {
+            console.error('LOG [TTS Player Exception]:', error.message);
+            this.isPlaying = false;
+            this.processQueue();
         });
 
         this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
@@ -83,8 +87,15 @@ class TTSManager {
                 timeout: 10000,
             });
 
-            // FIX: Explicitly pass StreamType.Arbitrary so FFmpeg demuxes the web link correctly
-            const resource = createAudioResource(url, {
+            // Fetch the MP3 audio array directly as a stream to avoid internal buffer cutting on Railway
+            const response = await axios({
+                method: 'get',
+                url: url,
+                responseType: 'stream'
+            });
+
+            // Parse the readable stream natively through the static FFmpeg compiler
+            const resource = createAudioResource(response.data, {
                 inputType: StreamType.Arbitrary
             });
 
