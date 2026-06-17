@@ -3,6 +3,9 @@ const Poll = require('../database/models/Poll');
 const config = require('../utils/config');
 
 class PollService {
+    /**
+     * Generates a clean, modern embed layout for active and concluded polls
+     */
     static generateEmbed(poll) {
         const totalVotes = poll.options.reduce((acc, opt) => acc + opt.votes.length, 0);
         
@@ -24,6 +27,7 @@ class PollService {
                 { name: '👥 Total Votes', value: `${totalVotes}`, inline: true }
             );
 
+        // Append winner data if the poll has completed
         if (!poll.isActive) {
             let maxVotes = -1;
             let winners = [];
@@ -44,6 +48,9 @@ class PollService {
         return embed;
     }
 
+    /**
+     * Generates interactive button elements for the poll
+     */
     static generateComponents(poll) {
         const row = new ActionRowBuilder();
         poll.options.forEach((opt, idx) => {
@@ -58,6 +65,9 @@ class PollService {
         return [row];
     }
 
+    /**
+     * Manages incoming vote interactions, handling switching and single-vote logic
+     */
     static async handleVote(interaction) {
         await interaction.deferUpdate();
         const optionIdx = parseInt(interaction.customId.replace('poll_vote_', ''), 10);
@@ -66,7 +76,7 @@ class PollService {
         const poll = await Poll.findOne({ messageId: interaction.message.id });
         if (!poll || !poll.isActive) return;
 
-        // Strip previous selections
+        // Strip previous selections to prevent duplicate voting and allow vote changing
         poll.options.forEach(opt => {
             const index = opt.votes.indexOf(userId);
             if (index > -1) opt.votes.splice(index, 1);
@@ -80,6 +90,10 @@ class PollService {
         await interaction.editReply({ embeds: [embed] });
     }
 
+    /**
+     * Background evaluation loop checking for expired polls
+     * Configured to run every 30 seconds
+     */
     static startUpdateLoop(client) {
         setInterval(async () => {
             try {
@@ -107,7 +121,7 @@ class PollService {
             } catch (error) {
                 console.error("Poll checking worker runtime exception:", error);
             }
-        }, 15000); // Scans database intervals every 15 seconds
+        }, 30000); // 30000 ms = 30 seconds
     }
 }
 
