@@ -1,4 +1,11 @@
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
+const { 
+    joinVoiceChannel, 
+    createAudioPlayer, 
+    createAudioResource, 
+    AudioPlayerStatus, 
+    VoiceConnectionStatus,
+    entersState 
+} = require('@discordjs/voice');
 const googleTTS = require('google-tts-api');
 const emojiMap = require('emoji-name-map');
 
@@ -26,8 +33,8 @@ class TTSManager {
         });
 
         this.connection.on(VoiceConnectionStatus.Disconnected, async () => {
-            // Handle automatic disconnection tracking or dynamic hot reconnects
             try {
+                // Attempt to wait up to 5 seconds to reconnect automatically
                 await Promise.race([
                     entersState(this.connection, VoiceConnectionStatus.Signalling, 5000),
                     entersState(this.connection, VoiceConnectionStatus.Connecting, 5000),
@@ -49,7 +56,7 @@ class TTSManager {
 
         if (!cleanedContent) return;
 
-        // Maximum character segmentation execution processing structure splits safely
+        // Structure a clean reading string phrase
         const phrase = `${message.member.displayName} ne kaha, ${cleanedContent}`;
         const chunks = phrase.length > 200 ? phrase.match(/[\s\S]{1,180}/g) || [] : [phrase];
 
