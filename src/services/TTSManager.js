@@ -7,9 +7,10 @@ const {
     StreamType,
     entersState 
 } = require('@discordjs/voice');
-const googleTTS = require('google-tts-api');
 const emojiMap = require('emoji-name-map');
-const axios = require('axios'); // Used to pull down clean raw stream streams
+const say = require('say');
+const fs = require('fs');
+const path = require('path');
 
 class TTSManager {
     constructor(guildId, textChannelId, voiceChannelId, client) {
@@ -19,12 +20,15 @@ class TTSManager {
         this.client = client;
         this.queue = [];
         this.isPlaying = false;
+        
+        // Dynamic temporary local path location for processing audio output frames
+        this.tempFilePath = path.join(__dirname, `../../temp_tts_${this.guildId}.wav`);
 
         this.connection = joinVoiceChannel({
             channelId: voiceChannelId,
             guildId: guildId,
             adapterCreator: client.guilds.cache.get(guildId).voiceAdapterCreator,
-            selfDeaf: false, // Ensure self-deaf is false so the connection handles voice processing frames natively
+            selfDeaf: false,
             selfMute: false
         });
 
@@ -32,12 +36,14 @@ class TTSManager {
         this.connection.subscribe(this.player);
 
         this.player.on(AudioPlayerStatus.Idle, () => {
+            this.cleanupTempFile();
             this.isPlaying = false;
             this.processQueue();
         });
 
         this.player.on('error', error => {
-            console.error('LOG [TTS Player Exception]:', error.message);
+            console.error('LOG [TTS Local Player Exception]:', error.message);
+            this.cleanupTempFile();
             this.isPlaying = false;
             this.processQueue();
         });
@@ -57,7 +63,6 @@ class TTSManager {
     enqueue(message) {
         let cleanedContent = message.content.replace(/<@!?\d+>/g, '').trim();
         
-        // Convert emojis into clean textual labels
         cleanedContent = cleanedContent.replace(/[\u1F600-\u1F64F]/gu, (match) => {
             const mapLookup = emojiMap.get(match);
             return mapLookup ? ` ${mapLookup.replace(/:/g, '')} emoji ` : ' emoji ';
@@ -65,8 +70,9 @@ class TTSManager {
 
         if (!cleanedContent) return;
 
-        // Structure a clean reading string phrase
         const phrase = `${message.member.displayName} ne kaha, ${cleanedContent}`;
+        
+        // Local engine limits can process large text streams cleanly
         const chunks = phrase.length > 200 ? phrase.match(/[\s\S]{1,180}/g) || [] : [phrase];
 
         this.queue.push(...chunks);
@@ -79,37 +85,43 @@ class TTSManager {
         this.isPlaying = true;
         const currentText = this.queue.shift();
 
+        // Export text locally as a standard WAV file via Festival
+        say.export(currentText, null, 1.0, this.tempFilePath, (err) => {
+            if (err) {
+                console.error('Local TTS Export Error:', err);
+                this.isPlaying = false;
+                return this.processQueue();
+            }
+
+            try {
+                // Instantly inject the local file directly into the player
+                const resource = createAudioResource(fs.createReadStream(this.tempFilePath), {
+                    inputType: StreamType.Arbitrary
+                });
+
+                this.player.play(resource);
+            } catch (streamErr) {
+                console.error('Local File Streaming Error:', streamErr);
+                this.isPlaying = false;
+                this.processQueue();
+            }
+        });
+    }
+
+    cleanupTempFile() {
         try {
-            const url = googleTTS.getAudioUrl(currentText, {
-                lang: 'hi-IN',
-                slow: false,
-                host: 'https://translate.google.com',
-                timeout: 10000,
-            });
-
-            // Fetch the MP3 audio array directly as a stream to avoid internal buffer cutting on Railway
-            const response = await axios({
-                method: 'get',
-                url: url,
-                responseType: 'stream'
-            });
-
-            // Parse the readable stream natively through the static FFmpeg compiler
-            const resource = createAudioResource(response.data, {
-                inputType: StreamType.Arbitrary
-            });
-
-            this.player.play(resource);
-        } catch (err) {
-            console.error('Audio Generation Processing Error via TTS layer:', err);
-            this.isPlaying = false;
-            this.processQueue();
+            if (fs.existsSync(this.tempFilePath)) {
+                fs.unlinkSync(this.tempFilePath);
+            }
+        } catch (e) {
+            console.error('Failed to clean up temp voice cache:', e.message);
         }
     }
 
     destroy() {
         this.queue = [];
         this.player.stop();
+        this.cleanupTempFile();
         if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
             this.connection.destroy();
         }
