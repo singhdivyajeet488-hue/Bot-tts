@@ -19,7 +19,6 @@ class TTSManager {
         this.queue = [];
         this.isPlaying = false;
 
-        // Establish the voice link parameters explicitly
         this.connection = joinVoiceChannel({
             channelId: voiceChannelId,
             guildId: guildId,
@@ -31,7 +30,6 @@ class TTSManager {
         this.player = createAudioPlayer();
         this.connection.subscribe(this.player);
 
-        // Core execution listener loops
         this.player.on(AudioPlayerStatus.Idle, () => {
             this.isPlaying = false;
             this.processQueue();
@@ -58,7 +56,6 @@ class TTSManager {
     enqueue(message) {
         let cleanedContent = message.content.replace(/<@!?\d+>/g, '').trim();
         
-        // Convert emojis into clean words
         cleanedContent = cleanedContent.replace(/[\u1F600-\u1F64F]/gu, (match) => {
             const mapLookup = emojiMap.get(match);
             return mapLookup ? ` ${mapLookup.replace(/:/g, '')} emoji ` : ' emoji ';
@@ -66,10 +63,7 @@ class TTSManager {
 
         if (!cleanedContent) return;
 
-        // Formulate standard natural reading string phrase: "Name ne kaha, message"
         const phrase = `${message.member.displayName} ne kaha, ${cleanedContent}`;
-        
-        // Segment longer strings into safe digestible chunks
         const chunks = phrase.length > 200 ? phrase.match(/[\s\S]{1,150}/g) || [] : [phrase];
 
         this.queue.push(...chunks);
@@ -83,7 +77,6 @@ class TTSManager {
         const currentText = this.queue.shift();
 
         try {
-            // Bulletproof, unrestricted streaming endpoint with custom headers mimicking standard browser requests
             const targetUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(currentText)}&tl=hi&total=1&idx=0&textlen=${currentText.length}&client=tw-ob&ttsspeed=1`;
 
             const response = await axios({
@@ -95,7 +88,6 @@ class TTSManager {
                 }
             });
 
-            // Convert the response directly into an audio track stream framework
             const resource = createAudioResource(response.data, {
                 inputType: StreamType.Arbitrary
             });
@@ -104,7 +96,6 @@ class TTSManager {
         } catch (err) {
             console.error('TTS Engine streaming failed:', err.message);
             this.isPlaying = false;
-            // Delay slightly before cycling to prevent system locking loops
             setTimeout(() => this.processQueue(), 1000);
         }
     }
