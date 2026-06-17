@@ -1,4 +1,4 @@
-// Locate and bind static FFmpeg binary paths for cloud containers
+// MUST BE AT THE ABSOLUTE TOP: Bind FFmpeg path mappings for voice processing
 const ffmpeg = require('ffmpeg-static');
 process.env.FFMPEG_PATH = ffmpeg;
 
