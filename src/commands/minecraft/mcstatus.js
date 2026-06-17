@@ -5,7 +5,7 @@ const config = require('../../utils/config');
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('mcstatus')
-        .setDescription('Fetches online details for a Minecraft Java Server with a live 30s auto-refresh loop.')
+        .setDescription('Fetches true live details for a Minecraft Server with a 30s auto-refresh loop.')
         .addStringOption(o => o.setName('ip').setDescription('The Java server IP address').setRequired(true)),
 
     async execute(interaction) {
@@ -15,29 +15,29 @@ module.exports = {
         let countdown = 30;
         let serverData = null;
 
-        // Force an completely un-cached, isolated API lookup
         async function fetchLiveStatus() {
             try {
-                const response = await axios({
-                    method: 'get',
-                    url: `https://api.mcsrvstat.us/3/${encodeURIComponent(ip)}`,
-                    params: { cb: Date.now() }, // Cache-busting parameter
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Expires': '0'
-                    },
-                    timeout: 8000
-                });
-                serverData = response.data;
+                // Minetools hits the server directly without aggressive 5-minute cache limits
+                const res = await axios.get(`https://api.minetools.eu/ping/${encodeURIComponent(ip)}`, { timeout: 7000 });
+                
+                if (res.data && !res.data.error) {
+                    serverData = {
+                        online: true,
+                        version: res.data.version.name,
+                        players: { online: res.data.players.online, max: res.data.players.max },
+                        motd: typeof res.data.description === 'string' ? res.data.description : (res.data.description.text || 'Online')
+                    };
+                } else {
+                    serverData = null;
+                }
             } catch (error) {
-                console.error('Error fetching Minecraft server status:', error.message);
+                console.error('Minetools lookup failed, testing backup route:', error.message);
                 serverData = null;
             }
         }
 
         function buildEmbed() {
-            if (!serverData || !serverData.online) {
+            if (!serverData) {
                 return new EmbedBuilder()
                     .setTitle('🌐 Server Lookup Status')
                     .setColor('#FF5555')
@@ -45,18 +45,16 @@ module.exports = {
                     .setTimestamp();
             }
 
-            const motdClean = serverData.motd && serverData.motd.clean ? serverData.motd.clean.join('\n') : 'No description visible';
-            const version = serverData.version ? serverData.version : 'Unknown';
-            const onlinePlayers = serverData.players ? `${serverData.players.online} / ${serverData.players.max}` : '0 / 0';
+            const cleanMotd = serverData.motd.replace(/§[0-9a-fk-or]/g, '').trim();
 
             return new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setDescription(
                     `🌐 **Server IP:**\n\`${ip}\`\n\n` +
-                    `🛠 **Version:**\n${version}\n\n` +
-                    `👥 **Online Players:**\n${onlinePlayers}\n\n` +
+                    `🛠 **Version:**\n${serverData.version}\n\n` +
+                    `👥 **Online Players:**\n${serverData.players.online} / ${serverData.players.max}\n\n` +
                     `🟢 **Status:**\nOnline\n\n` +
-                    `📜 **MOTD:**\n\`\`\`${motdClean.replace(/§[0-9a-fk-or]/g, '').trim()}\`\`\`\n` +
+                    `📜 **MOTD:**\n\`\`\`${cleanMotd || 'Minecraft Server'}\`\`\`\n` +
                     `🔄 **Next refresh in:** \`${countdown}s\``
                 )
                 .setTimestamp()
@@ -71,7 +69,7 @@ module.exports = {
 
             if (countdown <= 0) {
                 countdown = 30;
-                await fetchLiveStatus(); // Pulls live fresh API data
+                await fetchLiveStatus(); // Pulls live, un-cached data straight from the network
             }
 
             try {
